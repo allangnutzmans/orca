@@ -1,5 +1,6 @@
 import { PLUGIN_WORKSPACE_TERMINAL_LIMIT } from '../../../shared/plugins/workers/plugin-host-api'
 import type { PluginHostServices } from './plugin-host-methods'
+import type { PluginDesktopFrameServices } from './plugin-host-method-bindings'
 import { PluginSecretsStore } from '../plugin-secrets-store'
 import { PluginKvStore } from '../plugin-storage-store'
 import type { TerminalInputKind } from '../../../shared/terminal-input-kind'
@@ -31,9 +32,11 @@ export type PluginRuntimeDelegate = {
 export function bindPluginHostServices(input: {
   delegate: PluginRuntimeDelegate
   pluginsDataDir: string
+  desktop?: PluginDesktopFrameServices | null
 }): PluginHostServices {
   const { delegate, pluginsDataDir } = input
   return {
+    desktop: input.desktop ?? null,
     resolveActiveWorktreeContext: async () => {
       const context = await delegate.resolveActiveWorktreeContext()
       if (!context) {

@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { PluginImageCache } from '../plugins/plugin-image-cache'
 import { installPluginImageProtocolHandler } from '../plugins/plugin-image-protocol'
+import { getPluginDesktopFrameServices } from '../plugins/panels/plugin-frame-desktop-services'
 import { pluginHostVersion } from '../../shared/plugins/installation/plugin-host-version'
 import { app, BrowserWindow, net } from 'electron'
 import { performance } from 'node:perf_hooks'
@@ -103,7 +104,8 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
     getDevPluginPaths: () => normalizePluginIdList(state.store?.getSettings().devPluginPaths),
     getKeybindings: () => state.keybindings?.getOverrides() ?? {},
     getPluginKillListEntry: (pluginKey) => state.pluginKillListService?.find(pluginKey) ?? null,
-    hostEntryPath: resolvePluginHostEntryPath(app.getAppPath(), app.isPackaged)
+    hostEntryPath: resolvePluginHostEntryPath(app.getAppPath(), app.isPackaged),
+    getDesktopFrameServices: getPluginDesktopFrameServices
   })
   const pluginService = state.pluginService
   const pluginAutoUpdater = new PluginAutoUpdater({

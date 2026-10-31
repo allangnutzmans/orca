@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { PluginFrameGuest } from '../../../../shared/plugins/frames/plugin-frame-bridge'
+import { currentPluginFrameTheme } from './plugin-panel-design-token-css'
 
 export type PluginFrameEntryState =
   | { status: 'loading' }
   | { status: 'error' }
   | { status: 'unresponsive' }
-  | { status: 'ready'; html: string; sessionToken: string | null; revision: number }
+  | {
+      status: 'ready'
+      html: string
+      sessionToken: string | null
+      revision: number
+      guest?: PluginFrameGuest
+    }
 
 /**
  * A plugin frame's document (panel or custom editor), reread on every plugin change. Only new
@@ -40,10 +48,12 @@ export function usePluginFrameEntry(
     }
     const load = (): void => {
       const readId = ++latestRead
+      // Main bakes this into an isolated guest's document so its first paint already matches.
+      const theme = currentPluginFrameTheme()
       const pending =
         surface === 'panel'
-          ? pluginsApi.readPanelEntry({ pluginKey, panelId: contributionId })
-          : pluginsApi.readCustomEditorEntry?.({ pluginKey, editorId: contributionId })
+          ? pluginsApi.readPanelEntry({ pluginKey, panelId: contributionId, theme })
+          : pluginsApi.readCustomEditorEntry?.({ pluginKey, editorId: contributionId, theme })
       if (!pending) {
         fail()
         return
@@ -57,16 +67,19 @@ export function usePluginFrameEntry(
             fail()
             return
           }
-          const changed = result.html !== currentHtml
+          // Why the guest URL too: it is the document a guest loads, so a new one must remount.
+          const identity = `${result.guest?.url ?? ''}\0${result.html}`
+          const changed = identity !== currentHtml
           if (changed) {
-            currentHtml = result.html
+            currentHtml = identity
             revision += 1
           }
           const ready: PluginFrameEntryState = {
             status: 'ready',
             html: result.html,
             sessionToken: result.sessionToken,
-            revision
+            revision,
+            ...(result.guest ? { guest: result.guest } : {})
           }
           // Why: a session rotation must not revive a frame the watchdog suspended.
           setEntry((previous) =>

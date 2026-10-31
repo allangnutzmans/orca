@@ -65,7 +65,7 @@ Before any plugin code runs, the frame shell defines a frozen `window.orca`. It 
 supported way to talk to Orca; the messages underneath are internal and change without notice.
 
 ```js
-orca.api // { major: 1, minor: 0 }: the host API this Orca implements
+orca.api // { major: 1, minor: 1 }: the host API this Orca implements
 if (orca.host.has('workspace.readContext')) {
   // Synchronous: is the method offered to this surface by this Orca?
   const controller = new AbortController()
@@ -79,10 +79,45 @@ const subscription = orca.on('theme', ({ colorScheme }) => {})
 subscription.dispose()
 ```
 
+Two calls need a click or key press in the frame (they reject with `not_permitted` otherwise)
+and work only in the desktop app (in browser clients `orca.shell` and `orca.files` are undefined and
+`orca.host.has` answers false):
+
+```js
+button.onclick = () => orca.shell.openExternal('https://example.com/docs') // http:, https:, mailto:
+await orca.files.saveAs({ suggestedName: 'chart.png', mimeType: 'image/png', data: arrayBuffer })
+// Resolves with nothing once saved; rejects with code 'cancelled' if the person cancels.
+// The plugin never learns the path. Any mimeType is accepted; the dialog filters by the
+// suggested name's extension. Executable and shortcut types (.exe, .js, .sh, .app, .lnk…)
+// are refused.
+```
+
+`orca.locale` is Orca's UI language as a BCP-47 tag (`navigator.language` follows the
+operating system, not Orca). `<input type="file">` opens the system file picker.
+
 Methods, their surfaces and their errors are in the [host API reference](plugin-host-api.md).
 Aborting the `signal` rejects the call with `cancelled`. Treat an error `code` you do not know as
 `action_failed`. Params are strict: a field the running Orca does not know is refused with
 `invalid_params`, so check `orca.host.has` or `orca.api.minor` before using a newer one.
+
+#### Files and assets
+
+Preview: isolated frames are off by default for now (set `ORCA_PLUGIN_ISOLATED_FRAMES=1` to try
+them); until they ship, desktop frames behave like browser clients below. With them on, in the desktop
+app each plugin's frames run in their own isolated process, storage and origin,
+`orca-plugin-frame://<key>/`, served from your plugin folder. Load scripts, styles, images, fonts,
+WASM and workers by relative URL (`<script src="lib/app.js">`, `new Worker('worker.js')`,
+`WebAssembly.instantiateStreaming(fetch('lib/mod.wasm'))`), and `localStorage` and IndexedDB
+persist per plugin. The network is closed: anything not in your plugin folder, `data:` or
+`blob:` fails to load, whatever your own CSP says. One known gap: Electron 43 still resolves
+`<link rel="dns-prefetch">` hostnames, so "no network" means no connections or requests, not no
+DNS lookups. Links to other pages in your folder navigate
+the frame; for anything else use `orca.shell.openExternal`. A file that is a custom editor's
+`entry` gets the editor API; every other HTML page gets the panel API.
+
+Browser clients (`orca serve` in a web browser) still load a frame as one sandboxed document
+with an opaque origin and `connect-src 'none'`: inline your scripts and styles, use `data:` URLs
+for images and fonts, and do not rely on storage, workers or WASM loaded by URL there.
 
 Workers get the same calls on the `orca` object passed to `activate(orca)`:
 `orca.api`, `orca.host.call(method, params, { signal })`, `orca.host.has(method)`, plus
@@ -270,8 +305,8 @@ listed as experimental may change. These parts are stable and change only additi
 
 - manifest format 2, capability names and execution profiles;
 - host API 1 (`"pluginApi": 1`): method names, params, results, surfaces and error codes;
-- the frame API `window.orca` (`api`, `host.call`, `host.has`, `on`, and `document` in custom
-  editors) and the document `version`/`content` shape;
+- the frame API `window.orca` (`api`, `host.call`, `host.has`, `on`, `shell.openExternal`,
+  `files.saveAs`, and `document` in custom editors) and the document `version`/`content` shape;
 - theme token names, and theme ids once published (users' settings store them);
 - catalog format 2 (`orca-catalog.json`).
 

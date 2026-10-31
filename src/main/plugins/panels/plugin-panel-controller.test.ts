@@ -180,3 +180,41 @@ describe('PluginPanelController identity binding', () => {
     expect(executeHostCall).not.toHaveBeenCalled()
   })
 })
+
+describe('PluginPanelController user-gesture methods', () => {
+  it("runs them only for this machine's window, outside the 64 KiB message budget", async () => {
+    const plugin = await createPlugin()
+    const executeHostCall = vi.fn().mockResolvedValue({ ok: true, value: { saved: true } })
+    const controller = new PluginPanelController({
+      resolveApprovedPlugin: () => plugin,
+      contentVerifier: { verify: vi.fn().mockResolvedValue(undefined) },
+      executeHostCall,
+      log: () => vi.fn(),
+      panelAdmission: createPluginPanelCallAdmission({
+        limits: { maxBytes: 128, maxMessages: 30, perMs: 10_000 },
+        now: () => 0
+      })
+    })
+    const entry = await controller.open('renderer:1', plugin.pluginKey, 'dashboard')
+    const call = {
+      sessionToken: entry!.sessionToken,
+      action: 'files.saveAs',
+      params: { data: 'x'.repeat(4096) }
+    }
+
+    await expect(controller.execute('renderer:1', call)).resolves.toMatchObject({
+      ok: false,
+      code: 'not_permitted'
+    })
+    expect(executeHostCall).not.toHaveBeenCalled()
+    await expect(controller.execute('renderer:1', call, { desktop: true })).resolves.toMatchObject({
+      ok: true
+    })
+    expect(executeHostCall).toHaveBeenCalledWith(
+      plugin.pluginKey,
+      'files.saveAs',
+      call.params,
+      'panel'
+    )
+  })
+})

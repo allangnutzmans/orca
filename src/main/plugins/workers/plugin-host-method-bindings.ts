@@ -18,6 +18,16 @@ export type PluginWorktreeContext = {
   displayName: string
 }
 
+/** Desktop-only sinks for frame methods; absent in headless serve. */
+export type PluginDesktopFrameServices = {
+  openExternal(pluginId: string, url: string): Promise<boolean>
+  /** False when the person cancelled the dialog. */
+  saveFile(
+    pluginId: string,
+    input: { suggestedName?: string; mimeType?: string; data: string | ArrayBuffer | Uint8Array }
+  ): Promise<boolean>
+}
+
 export type PluginHostServices = {
   resolveActiveWorktreeContext(): Promise<PluginWorktreeContext | null>
   listWorktreeTerminals(worktreeId: string): Promise<{ id: string }[]>
@@ -48,6 +58,7 @@ export type PluginHostServices = {
     set(pluginId: string, key: string, value: string): { ok: true } | { ok: false; error: string }
     delete(pluginId: string, key: string): void
   }
+  desktop?: PluginDesktopFrameServices | null
   settings: {
     getAll(pluginId: string): Record<string, PluginJsonValue>
     set(
@@ -171,7 +182,23 @@ const HANDLERS: Record<PluginHostMethodName, BoundPluginHostMethod> = {
   })),
   'settings.set': bind(api['settings.set'], async ({ key, value }, { pluginId, services }) =>
     okOrThrow(services.settings.set(pluginId, key, value))
-  )
+  ),
+  'shell.openExternal': bind(
+    api['shell.openExternal'],
+    async ({ url }, { pluginId, services }) => ({
+      opened: await requireDesktop(services).openExternal(pluginId, url)
+    })
+  ),
+  'files.saveAs': bind(api['files.saveAs'], async (params, { pluginId, services }) => ({
+    saved: await requireDesktop(services).saveFile(pluginId, params)
+  }))
+}
+
+function requireDesktop(services: PluginHostServices): PluginDesktopFrameServices {
+  if (!services.desktop) {
+    throw new Error('this method is only available in the Orca desktop app')
+  }
+  return services.desktop
 }
 
 function okOrThrow(result: { ok: true } | { ok: false; error: string }): typeof OK {

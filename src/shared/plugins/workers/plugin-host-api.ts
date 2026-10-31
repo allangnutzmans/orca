@@ -92,6 +92,53 @@ const settingsGetResult = z.object({ settings: z.record(z.string(), pluginJsonVa
 const settingsSetParams = z.strictObject({ key: storageKeySchema, value: pluginJsonValueSchema })
 const settingsSetResult = z.object({ ok: z.literal(true) })
 
+/** Frame methods that only run on a click or key press in the frame (`userActivation`). */
+export const PLUGIN_FRAME_USER_METHODS = {
+  openExternal: 'shell.openExternal',
+  saveAs: 'files.saveAs'
+} as const
+
+export const PLUGIN_EXTERNAL_URL_MAX_LENGTH = 8192
+export const PLUGIN_EXTERNAL_URL_PROTOCOLS: readonly string[] = ['http:', 'https:', 'mailto:']
+export const PLUGIN_SAVE_AS_MAX_BYTES = 64 * 1024 * 1024
+
+const shellOpenExternalParams = z.strictObject({
+  url: z
+    .string()
+    .min(1)
+    .max(PLUGIN_EXTERNAL_URL_MAX_LENGTH)
+    .refine(isPluginExternalUrl, 'url must be an http:, https: or mailto: URL')
+})
+const shellOpenExternalResult = z.object({ opened: z.boolean() })
+
+const saveAsDataSchema = z.union([
+  z.string().max(PLUGIN_SAVE_AS_MAX_BYTES),
+  // Why Uint8Array too: IPC between Orca's own processes may hand bytes over as a view.
+  z
+    .custom<ArrayBuffer | Uint8Array>(
+      (value) => value instanceof ArrayBuffer || value instanceof Uint8Array,
+      'data must be a string or ArrayBuffer'
+    )
+    .refine((value) => value.byteLength <= PLUGIN_SAVE_AS_MAX_BYTES, 'data exceeds 64 MiB')
+    // Names the type in the generated reference, which otherwise prints unrepresentable as JSON.
+    .meta({ type: 'ArrayBuffer' })
+])
+const filesSaveAsParams = z.strictObject({
+  suggestedName: z.string().min(1).max(255).optional(),
+  mimeType: z.string().min(1).max(255).optional(),
+  data: saveAsDataSchema
+})
+/** The chosen path never reaches the plugin; `saved` is false when the person cancelled. */
+const filesSaveAsResult = z.object({ saved: z.boolean() })
+
+export function isPluginExternalUrl(url: string): boolean {
+  try {
+    return PLUGIN_EXTERNAL_URL_PROTOCOLS.includes(new URL(url).protocol)
+  } catch {
+    return false
+  }
+}
+
 export type PluginHostMethodSpec<
   P extends z.ZodType = z.ZodType,
   R extends z.ZodType = z.ZodType
@@ -104,7 +151,10 @@ export type PluginHostMethodSpec<
   deprecatedSince?: number
   /** Machine-readable resource boundary enforced by the host binding. */
   scope: 'active-workspace' | 'explicit-terminal' | 'plugin-private' | 'desktop'
-  capability: PluginCapabilityKind
+  /** Null: no capability; consent and the surface still gate the call. */
+  capability: PluginCapabilityKind | null
+  /** Runs only on transient user activation in the calling frame, checked by the frame host. */
+  userActivation?: true
   /** Mutations are audit-logged with actor `plugin:<id>`. */
   mutation: boolean
   /** Where plugin code may call it; any other surface gets `not_permitted`. */
@@ -115,6 +165,7 @@ export type PluginHostMethodSpec<
 
 const ALL_SURFACES = ['worker', 'panel', 'editor'] as const
 const WORKER_ONLY = ['worker'] as const
+const FRAMES_ONLY = ['panel', 'editor'] as const
 
 const spec = <P extends z.ZodType, R extends z.ZodType>(
   entry: PluginHostMethodSpec<P, R>
@@ -242,6 +293,30 @@ export const PLUGIN_HOST_API = {
     surfaces: WORKER_ONLY,
     params: settingsSetParams,
     result: settingsSetResult
+  }),
+  'shell.openExternal': spec({
+    summary:
+      'Opens an http:, https: or mailto: URL in the default browser. Needs a click or key press in the frame; desktop app only.',
+    since: 1,
+    scope: 'desktop',
+    capability: null,
+    userActivation: true,
+    mutation: false,
+    surfaces: FRAMES_ONLY,
+    params: shellOpenExternalParams,
+    result: shellOpenExternalResult
+  }),
+  'files.saveAs': spec({
+    summary:
+      "Offers data (a string or ArrayBuffer, up to 64 MiB) in Orca's save dialog; the plugin never learns the path. Needs a click or key press in the frame; desktop app only.",
+    since: 1,
+    scope: 'desktop',
+    capability: null,
+    userActivation: true,
+    mutation: true,
+    surfaces: FRAMES_ONLY,
+    params: filesSaveAsParams,
+    result: filesSaveAsResult
   })
 }
 
@@ -269,4 +344,19 @@ export const PLUGIN_HOST_API_MINOR = Math.max(
 /** Methods a surface may call, for `hello` and `host.has`. */
 export function pluginHostMethodsFor(surface: PluginSurface): PluginHostMethodName[] {
   return PLUGIN_HOST_METHOD_NAMES.filter((name) => PLUGIN_HOST_API[name].surfaces.includes(surface))
+}
+
+/** A frame's methods: user-gesture methods only where Orca can verify the gesture (a guest). */
+export function pluginFrameMethodsFor(
+  surface: 'panel' | 'editor',
+  isolatedGuest: boolean
+): PluginHostMethodName[] {
+  return pluginHostMethodsFor(surface).filter(
+    (name) => isolatedGuest || PLUGIN_HOST_API[name].userActivation !== true
+  )
+}
+
+/** The minor a frame reports: the newest method it is actually offered, so iframes stay at 0. */
+export function pluginHostApiMinorFor(methods: readonly PluginHostMethodName[]): number {
+  return Math.max(0, ...methods.map((name) => PLUGIN_HOST_API[name].since))
 }

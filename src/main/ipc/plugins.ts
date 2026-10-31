@@ -1,9 +1,8 @@
 import { pluginThemeSettingsAfterRemoval } from '../../shared/plugin-theme-settings'
-import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { ipcMain } from 'electron'
 import { z } from 'zod'
 import type { Store } from '../persistence'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
-import type { PluginFrameEntry } from '../../shared/plugins/frames/plugin-frame-bridge'
 import type { PluginHostCallOutcome } from '../../shared/plugins/frames/plugin-protocol'
 import { getUserPluginsDir, getPluginsDataDir } from '../plugins/plugin-discovery'
 import {
@@ -15,7 +14,11 @@ import {
 import { applyPluginConsent, applyPluginEnablement } from '../plugins/plugin-enablement'
 import { readApprovedPluginNewFileTemplate } from '../plugins/plugin-new-file-template'
 import type { PluginService } from '../plugins/plugin-service'
-import { bindPluginPanelOwnerLifecycle } from '../plugins/panels/plugin-panel-owner-lifecycle'
+import { registerPluginFrameEntryHandlers, rendererPanelOwner } from './plugin-frame-entry-ipc'
+import {
+  bindPluginFrameGuests,
+  clearPluginFrameStorage
+} from '../plugins/panels/plugin-frame-guest-sessions'
 import { isQualifiedPluginKey } from '../../shared/plugins/manifest/plugin-manifest'
 import { pluginConsentRequestSchema } from '../../shared/plugins/approval/plugin-consent-request'
 import { normalizePluginIdList } from '../../shared/plugins/approval/plugin-consent-state'
@@ -37,16 +40,6 @@ export function parsePluginConsentArgs(args: unknown): z.infer<typeof pluginCons
 const setEnabledArgsSchema = z.object({
   pluginKey: z.string().refine(isQualifiedPluginKey, 'invalid qualified plugin key'),
   enabled: z.boolean()
-})
-
-const readPanelEntryArgsSchema = z.object({
-  pluginKey: z.string().min(1),
-  panelId: z.string().min(1)
-})
-
-const readCustomEditorEntryArgsSchema = z.object({
-  pluginKey: z.string().min(1),
-  editorId: z.string().min(1)
 })
 
 const readNewFileTemplateArgsSchema = z.object({
@@ -98,10 +91,6 @@ export function canRemoveInstalledPlugin(
     lock?.plugins[pluginKey]?.source.kind !== 'bundled' &&
     pluginService.getDiscovered().some((plugin) => plugin.pluginKey === pluginKey && !plugin.isDev)
   )
-}
-
-function rendererPanelOwner(webContentsId: number): string {
-  return `renderer:${webContentsId}`
 }
 
 export function registerPluginHandlers(
@@ -173,33 +162,8 @@ export function registerPluginHandlers(
     return listPluginsForClients(pluginService)
   })
 
-  // Sandboxed iframe srcdoc needs CSP-wrapped HTML contents across IPC.
-  const openFrameEntry = async (
-    sender: IpcMainInvokeEvent['sender'],
-    open: (ownerKey: string, isCurrent: () => boolean) => Promise<PluginFrameEntry | null>
-  ): Promise<PluginFrameEntry | null> => {
-    const ownerKey = rendererPanelOwner(sender.id)
-    const ownerLease = bindPluginPanelOwnerLifecycle(sender, () =>
-      pluginService.panels.revokeOwner(ownerKey)
-    )
-    await pluginService.whenReady()
-    // Why not revoke on a stale load: the owner key may already belong to a successor document.
-    return open(ownerKey, ownerLease.isCurrent)
-  }
-
-  ipcMain.handle('plugins:readPanelEntry', (event, args: unknown) => {
-    const parsed = readPanelEntryArgsSchema.parse(args)
-    return openFrameEntry(event.sender, (ownerKey, isCurrent) =>
-      pluginService.panels.open(ownerKey, parsed.pluginKey, parsed.panelId, isCurrent)
-    )
-  })
-
-  ipcMain.handle('plugins:readCustomEditorEntry', (event, args: unknown) => {
-    const parsed = readCustomEditorEntryArgsSchema.parse(args)
-    return openFrameEntry(event.sender, (ownerKey, isCurrent) =>
-      pluginService.panels.openCustomEditor(ownerKey, parsed.pluginKey, parsed.editorId, isCurrent)
-    )
-  })
+  bindPluginFrameGuests(pluginService)
+  registerPluginFrameEntryHandlers(store, pluginService)
 
   ipcMain.handle('plugins:readNewFileTemplate', async (_event, args: unknown) => {
     const parsed = readNewFileTemplateArgsSchema.parse(args)
@@ -212,7 +176,9 @@ export function registerPluginHandlers(
     'plugins:panelAction',
     async (event, args: unknown): Promise<PluginHostCallOutcome> => {
       await pluginService.whenReady()
-      return pluginService.panels.execute(rendererPanelOwner(event.sender.id), args)
+      return pluginService.panels.execute(rendererPanelOwner(event.sender.id), args, {
+        desktop: true
+      })
     }
   )
 
@@ -270,6 +236,7 @@ export function registerPluginHandlers(
         pluginKey: parsed.pluginKey
       })
     )
+    await clearPluginFrameStorage(parsed.pluginKey)
     const settings = store.getSettings()
     const consents = { ...settings.pluginConsents }
     delete consents[parsed.pluginKey]
