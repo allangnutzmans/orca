@@ -1,6 +1,10 @@
 import type React from 'react'
+import { RefreshCw } from 'lucide-react'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
-import { pluginAppThemeSlotUpdate } from '../../../../shared/plugin-theme-settings'
+import {
+  MATCH_TERMINAL_APP_THEME,
+  pluginAppThemeSlotUpdate
+} from '../../../../shared/plugin-theme-settings'
 import { Button } from '../ui/button'
 import {
   Select,
@@ -62,7 +66,8 @@ export function AppearanceThemeControl({
   )
 }
 
-/** The app theme painted while Orca is in one mode: built-in or any enabled plugin theme of it. */
+/** The app theme painted while Orca is in one mode: built-in, the terminal's colors, or any
+ *  enabled plugin theme of that mode. */
 export function AppearanceThemeSlotSelect({
   base,
   label,
@@ -78,6 +83,8 @@ export function AppearanceThemeSlotSelect({
   const pluginTerminalThemes = usePluginTerminalThemes()
   const selectedId = base === 'dark' ? settings.pluginAppThemeDark : settings.pluginAppThemeLight
   const active = themes.find((theme) => theme.id === selectedId)
+  const value =
+    selectedId === MATCH_TERMINAL_APP_THEME ? MATCH_TERMINAL_APP_THEME : (active?.id ?? BUILT_IN)
   const groups = Map.groupBy(themes, (theme) => theme.pluginKey)
   const terminal = active
     ? pluginTerminalThemes.find(
@@ -90,10 +97,15 @@ export function AppearanceThemeSlotSelect({
   return (
     <div className="flex flex-col items-end gap-1">
       <Select
-        value={active?.id ?? BUILT_IN}
-        onValueChange={(value) =>
+        value={value}
+        onValueChange={(next) =>
           updateSettings(
-            pluginAppThemeSlotUpdate(base, themes.find((theme) => theme.id === value)?.id ?? null)
+            pluginAppThemeSlotUpdate(
+              base,
+              next === MATCH_TERMINAL_APP_THEME
+                ? MATCH_TERMINAL_APP_THEME
+                : (themes.find((theme) => theme.id === next)?.id ?? null)
+            )
           )
         }
       >
@@ -106,6 +118,16 @@ export function AppearanceThemeSlotSelect({
               'auto.components.settings.AppearanceInterfaceSection.pluginIconTheme.builtIn',
               'Built-in'
             )}
+          </SelectItem>
+          <SelectItem value={MATCH_TERMINAL_APP_THEME}>
+            {translate(
+              'auto.components.settings.AppearanceThemeControl.matchTerminal',
+              'Match Terminal'
+            )}
+            <span className="flex items-center text-xs text-muted-foreground">
+              (<RefreshCw className="mr-1 size-3" aria-hidden />
+              {translate('auto.components.settings.AppearanceThemeControl.dynamic', 'dynamic')})
+            </span>
           </SelectItem>
           {[...groups.values()].map((group) => (
             <SelectGroup key={group[0].pluginKey}>
