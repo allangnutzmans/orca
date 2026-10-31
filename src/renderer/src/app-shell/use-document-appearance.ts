@@ -19,7 +19,7 @@ import { usePluginIconThemeActivation } from '../store/plugin-icon-themes'
 import { scheduleRuntimeGraphSync } from '../runtime/sync-runtime-graph'
 import { useAppStore } from '../store'
 import { useDocumentDarkTheme } from '@/hooks/use-document-dark-theme'
-import { useMediaQuery } from '@/hooks/use-media-query'
+import { useReduceVisualEffects } from '@/hooks/use-reduce-visual-effects'
 
 export function useDocumentAppearance(): void {
   const theme = useAppStore((s) => s.settings?.theme)
@@ -39,7 +39,7 @@ export function useDocumentAppearance(): void {
   const codeFontSmoothing = useAppStore((s) => s.settings?.codeFontSmoothing)
   const editorFontFamily = useAppStore((s) => s.settings?.editorFontFamily)
   usePluginIconThemeActivation(useAppStore((s) => s.settings?.pluginIconTheme))
-  const reduceEffects = useMediaQuery('(prefers-reduced-transparency: reduce)')
+  const reduceEffects = useReduceVisualEffects(useAppStore((s) => s.settings?.reduceVisualEffects))
   const terminalTranslucent = useAppStore((s) => (s.settings?.terminalBackgroundOpacity ?? 1) < 1)
   // Why re-parse: the theme list keeps the registration as received, and a newer host may send
   // a background this build cannot paint; it must drop to no image, never reach CSS.

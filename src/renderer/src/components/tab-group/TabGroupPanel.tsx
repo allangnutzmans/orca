@@ -263,7 +263,7 @@ export default function TabGroupPanel({
             }`
           : ''
       }`}
-      // Why not over a theme image: group opacity would let it bleed through opaque chrome.
+      // Why not over a window backdrop (material or theme image): group opacity would let it bleed through opaque chrome.
       style={
         hasSplitGroups && !isFocused && !backdropActive
           ? { opacity: UNFOCUSED_SPLIT_GROUP_OPACITY }
@@ -329,7 +329,7 @@ export default function TabGroupPanel({
         ref={setBodyRef}
         data-tab-group-body-id={groupId}
         data-worktree-id={worktreeId}
-        // Why: the pane overlay paints terminals above this body; only they show the theme image.
+        // Why: the pane overlay paints terminals above this body; only they show the window backdrop.
         data-translucent-tab-body={activeTab?.contentType === 'terminal' ? '' : undefined}
         className="relative flex-1 min-h-0 overflow-hidden"
         style={bodyAnchorStyle}
