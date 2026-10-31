@@ -1,6 +1,6 @@
 import { EDITOR_METHODS, FRAME_EVENTS, type PluginFrameTheme } from './plugin-frame-bridge'
 import { PLUGIN_ERROR_CODES, PLUGIN_PROTOCOL_VERSION } from './plugin-protocol'
-import { PLUGIN_FRAME_TRANSPORT_GLOBAL } from './plugin-frame-guest'
+import { PLUGIN_DECLARATIVE_POST_GLOBAL, PLUGIN_FRAME_TRANSPORT_GLOBAL } from './plugin-frame-guest'
 import { PLUGIN_HOST_API_MAJOR } from '../workers/plugin-host-api-major'
 import {
   PLUGIN_FRAME_USER_METHODS,
@@ -60,8 +60,9 @@ export const PANEL_DESIGN_TOKEN_ALLOWLIST = [
 
 export type PluginFrameSurface = 'panel' | 'editor'
 
-/** How the frame script reaches the host: `window.parent` (srcdoc iframe) or the guest preload. */
-type FrameTransport = 'parent' | 'guest'
+/** How the frame script reaches the host: `window.parent` (srcdoc iframe) or the guest preload;
+ *  a declarative host page also gets Orca's boot script a way to post `ui.*` events. */
+type FrameTransport = 'parent' | 'guest' | 'declarative-guest'
 
 /** The frozen `window.orca` every frame gets before plugin code runs: the public frame API.
  *  The envelope underneath is internal. `api` and `has` start from this host's table, so they work
@@ -79,7 +80,8 @@ function frameApiScript(surface: PluginFrameSurface, transport: FrameTransport):
     // Iframes get no user-gesture API at all: Orca cannot verify their gestures.
     user: transport === 'parent' ? null : PLUGIN_FRAME_USER_METHODS,
     tokensStyleId: PANEL_SHELL_TOKENS_STYLE_ID,
-    transportGlobal: transport === 'parent' ? null : PLUGIN_FRAME_TRANSPORT_GLOBAL
+    transportGlobal: transport === 'parent' ? null : PLUGIN_FRAME_TRANSPORT_GLOBAL,
+    declarativePost: transport === 'declarative-guest' ? PLUGIN_DECLARATIVE_POST_GLOBAL : null
   }).replaceAll('<', '\\u003c')
   return `;(function (C) {
   var E = C.events
@@ -244,6 +246,12 @@ function frameApiScript(surface: PluginFrameSurface, transport: FrameTransport):
     }, true)
   }
   Object.defineProperty(window, 'orca', { value: Object.freeze(orca), writable: false, configurable: false })
+  if (C.declarativePost) {
+    // One-shot for Orca's boot script, which deletes it before importing the plugin module.
+    Object.defineProperty(window, C.declarativePost, { configurable: true, value: function (event, payload) {
+      post({ kind: 'evt', event: String(event), payload: payload })
+    } })
+  }
   post({ kind: 'evt', event: E.ready, payload: { protocol: C.protocol } })
 })(${config})
 `
@@ -305,8 +313,9 @@ export const PLUGIN_GUEST_CSP =
 export function buildPluginGuestShellHtml(
   pluginHtml: string,
   surface: PluginFrameSurface = 'panel',
-  options: { theme?: PluginFrameTheme | null } = {}
+  options: { declarative?: boolean; theme?: PluginFrameTheme | null } = {}
 ): string {
+  const transport = options.declarative ? 'declarative-guest' : 'guest'
   const theme = options.theme
   // Why baked in: plugins that read tokens at boot, and the first paint, must not wait for `hello`.
   const scheme =
@@ -315,6 +324,6 @@ export function buildPluginGuestShellHtml(
   return (
     `<!doctype html>\n<html${scheme ? ` class="${scheme}"` : ''}>\n<head>\n<meta charset="utf-8">\n` +
     `<style id="${PANEL_SHELL_TOKENS_STYLE_ID}">:root{${tokens}}</style>\n` +
-    `<script>\n'use strict'\n${frameApiScript(surface, 'guest')}</script>\n</head>\n${pluginHtml}`
+    `<script>\n'use strict'\n${frameApiScript(surface, transport)}</script>\n</head>\n${pluginHtml}`
   )
 }

@@ -1,0 +1,23 @@
+{
+  "manifestVersion": 2,
+  "execution": "sandboxed-ui",
+  "id": "hello-declarative",
+  "publisher": "samples",
+  "name": "Hello Declarative",
+  "version": "1.0.0",
+  "description": "Sample declarative (TSX) panel: atoms, a list, an input and buttons rendered with Orca's own components.",
+  "engines": { "orca": ">=1.4.245" },
+  "pluginApi": 1,
+  "contributes": {
+    "panels": [
+      {
+        "id": "todos",
+        "title": "Hello Declarative",
+        "icon": "blocks",
+        "entry": "dist/panel.js",
+        "runtime": "declarative"
+      }
+    ]
+  },
+  "capabilities": []
+}

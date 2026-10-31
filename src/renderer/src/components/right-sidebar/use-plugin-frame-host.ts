@@ -5,6 +5,7 @@ import { pluginEvent } from '../../../../shared/plugins/frames/plugin-protocol'
 import {
   createPluginFrameEnvelopeHandler,
   createPluginFrameMessageHandler,
+  type PluginFrameDeclarativeChannel,
   type PluginFrameEditorChannel
 } from './plugin-frame-host'
 import {
@@ -23,9 +24,13 @@ export function usePluginFrameHost(options: {
   frameKey: string | null
   sessionToken: string | null
   editor?: PluginFrameEditorChannel
+  declarative?: PluginFrameDeclarativeChannel
+  /** Must be stable: a one-shot grant from presses on Orca's own controls. */
+  consumeHostActivation?: () => boolean
   onUnresponsive: () => void
 }): { onFrameLoad: () => void } {
-  const { surface, frameRef, frameKey, sessionToken, editor } = options
+  const { surface, frameRef, frameKey, sessionToken, editor, declarative, consumeHostActivation } =
+    options
   const [loadedFrameKey, setLoadedFrameKey] = useState<string | null>(null)
   const onUnresponsiveRef = useRef(options.onUnresponsive)
   // Why a ref: main rotates sessions without replacing the document or its in-flight calls.
@@ -60,7 +65,9 @@ export function usePluginFrameHost(options: {
       getSessionToken: () => sessionTokenRef.current,
       isActive: () => active,
       onPong: (pingId: number) => watchdog.handlePong(pingId),
-      editor
+      editor,
+      declarative,
+      consumeHostActivation
     }
     if (element instanceof HTMLIFrameElement) {
       const handler = createPluginFrameMessageHandler(hostOptions)
@@ -86,7 +93,16 @@ export function usePluginFrameHost(options: {
       element.removeEventListener('ipc-message', onMessage)
       element.removeEventListener('dom-ready', onReady)
     }
-  }, [editor, frameKey, frameRef, getFrameWindow, surface, watchdog])
+  }, [
+    consumeHostActivation,
+    declarative,
+    editor,
+    frameKey,
+    frameRef,
+    getFrameWindow,
+    surface,
+    watchdog
+  ])
 
   useEffect(() => {
     if (!frameKey || loadedFrameKey !== frameKey) {

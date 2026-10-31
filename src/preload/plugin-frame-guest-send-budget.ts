@@ -1,5 +1,5 @@
 /** Why written out: the sandboxed preload can't import shared chunks. Generous enough for a 64 MiB
- *  save plus a burst of messages; the host still enforces its own per-lane budgets. */
+ *  save plus a burst of declarative renders; the host still enforces its own per-lane budgets. */
 export const PRELOAD_PLUGIN_FRAME_SEND_LIMITS = {
   maxMessageBytes: 80 * 1024 * 1024,
   maxMessages: 600,

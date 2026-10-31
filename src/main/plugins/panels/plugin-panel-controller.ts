@@ -40,7 +40,7 @@ type PluginPanelControllerOptions = {
 type FrameOpenOptions = { shell?: boolean }
 
 type LoadedPluginPanel = {
-  entry: { html: string }
+  entry: { html: string; runtime?: 'declarative' }
   binding: PluginPanelSessionBinding
 }
 
@@ -210,12 +210,17 @@ export class PluginPanelController {
     if (!plugin || !contribution) {
       return null
     }
-    const html = withShell ? await this.readShell(plugin, contribution.entry, surface) : ''
+    const declarative = contribution.runtime === 'declarative'
+    // Why no entry text: a declarative entry is a module the desktop guest imports; browser
+    // clients get an empty shell and show that the panel needs the desktop app.
+    const html = withShell
+      ? await this.readShell(plugin, declarative ? null : contribution.entry, surface)
+      : ''
     if (html === null) {
       return null
     }
     return {
-      entry: { html },
+      entry: declarative ? { html, runtime: 'declarative' } : { html },
       binding: {
         pluginKey,
         surface,
@@ -228,7 +233,7 @@ export class PluginPanelController {
 
   private async readShell(
     plugin: ValidDiscoveredPlugin,
-    entryPath: string,
+    entryPath: string | null,
     surface: PluginFrameSurface
   ): Promise<string | null> {
     const { pluginKey } = plugin
@@ -236,11 +241,13 @@ export class PluginPanelController {
     try {
       await this.options.contentVerifier.verify(plugin)
       const html = buildPluginPanelShellHtml(
-        await readContainedPluginArtifactText(
-          plugin.rootDir,
-          entryPath,
-          PLUGIN_PANEL_ENTRY_MAX_BYTES
-        ),
+        entryPath === null
+          ? ''
+          : await readContainedPluginArtifactText(
+              plugin.rootDir,
+              entryPath,
+              PLUGIN_PANEL_ENTRY_MAX_BYTES
+            ),
         surface
       )
       const current = this.options.resolveApprovedPlugin(pluginKey)

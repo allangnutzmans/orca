@@ -47,7 +47,10 @@ async function fixture(): Promise<ValidDiscoveredPlugin> {
       engines: { orca: `>=${PLUGIN_MANIFEST_V2_SINCE}` },
       pluginApi: 1,
       contributes: {
-        panels: [{ id: 'panel', title: 'Charts', entry: 'panel.html' }],
+        panels: [
+          { id: 'panel', title: 'Charts', entry: 'panel.html' },
+          { id: 'todos', title: 'Todos', entry: 'lib/app.js', runtime: 'declarative' }
+        ],
         customEditors: [{ id: 'csv', title: 'CSV', extensions: ['.csv'], entry: 'editor.html' }]
       }
     })
@@ -63,7 +66,8 @@ function handlerFor(
     {
       findApprovedPluginByFrameKey: (frameKey) => (frameKey === KEY ? plugin : null),
       verifyTree: verify,
-      log
+      log,
+      readDeclarativeRuntime: async () => new TextEncoder().encode('export const h = 1')
     },
     KEY
   )
@@ -205,6 +209,27 @@ describe('orca-plugin-frame protocol', () => {
   it('refuses methods other than GET and HEAD', async () => {
     const { handle } = handlerFor(await fixture())
     expect((await handle(get(`orca-plugin-frame://${KEY}/panel.html`, 'POST'))).status).toBe(405)
+  })
+
+  it("serves Orca's declarative host page only for a declared declarative entry", async () => {
+    const { handle } = handlerFor(await fixture())
+    const page = await handle(
+      get(`orca-plugin-frame://${KEY}/__orca/declarative-host.html?entry=lib%2Fapp.js`)
+    )
+    expect(page.status).toBe(200)
+    const html = await page.text()
+    expect(html).toContain('"orca":"/__orca/orca-runtime.mjs"')
+    expect(html).toContain('"/lib/app.js"')
+    expect(html).toContain('__orcaDeclarativePost')
+    for (const entry of ['panel.html', '..%2Fsecret.txt', 'https%3A%2F%2Fexample.com%2Fx.js', '']) {
+      const refused = await handle(
+        get(`orca-plugin-frame://${KEY}/__orca/declarative-host.html?entry=${entry}`)
+      )
+      expect(refused.status).toBe(404)
+    }
+    const runtime = await handle(get(`orca-plugin-frame://${KEY}/__orca/orca-runtime.mjs`))
+    expect(runtime.headers.get('Content-Type')).toBe('text/javascript; charset=utf-8')
+    expect(await runtime.text()).toBe('export const h = 1')
   })
 
   it('serves only the bytes the verified tree covered for code and documents', async () => {

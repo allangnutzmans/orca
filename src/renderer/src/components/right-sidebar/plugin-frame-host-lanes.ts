@@ -1,3 +1,5 @@
+import { PLUGIN_DECLARATIVE_LIMITS } from '../../../../shared/plugins/declarative/plugin-declarative-limits'
+import { PLUGIN_DECLARATIVE_MESSAGES } from '../../../../shared/plugins/declarative/plugin-declarative-message-names'
 import type { PluginFrameHello } from '../../../../shared/plugins/frames/plugin-frame-bridge'
 import { PLUGIN_FRAME_IPC_CHANNEL } from '../../../../shared/plugins/frames/plugin-frame-guest'
 import {
@@ -74,26 +76,47 @@ export function pluginFrameHello(
 
 /**
  * Whether a user-gesture method may run. A srcdoc iframe shares the host window, whose activation
- * any keystroke in Orca sets, so only a guest's isolated-world stamp counts.
+ * any keystroke in Orca sets, so only a guest's isolated-world stamp counts; `hostActivation` is a
+ * one-shot grant from a press on Orca's own controls (declarative panels).
  */
-export function admitsUserMethod(method: string, context: PluginFrameMessageContext): boolean {
+export function admitsUserMethod(
+  method: string,
+  context: PluginFrameMessageContext,
+  consumeHostActivation?: () => boolean
+): boolean {
   if (getPluginHostMethodSpec(method)?.userActivation !== true) {
     return true
   }
-  return context.transport === 'guest' && context.userActivation
+  if (context.transport === 'guest' && context.userActivation) {
+    return true
+  }
+  return consumeHostActivation?.() === true
 }
 
 const SAVE_AS_LIMITS = { maxBytes: PLUGIN_SAVE_AS_MAX_BYTES + 4096, maxMessages: 5, perMs: 10_000 }
+const RENDER_LIMITS = { maxBytes: 640 * 1024, maxMessages: 200, perMs: 10_000 }
+/**
+ * Size-walk caps for `ui.render`, derived from the tree limits so every tree the parser would
+ * accept is metered rather than refused: a node nests two levels (node, children array) plus props.
+ * The byte cap still bounds the walk's work.
+ */
+export const PLUGIN_FRAME_RENDER_WALK_LIMITS = {
+  maxDepth: PLUGIN_DECLARATIVE_LIMITS.maxDepth * 2 + 24,
+  maxObjects: PLUGIN_DECLARATIVE_LIMITS.maxNodes * 8 + 1024
+}
 
-export type PluginFrameLanes = { save: PanelMessageBudget }
+export type PluginFrameLanes = { save: PanelMessageBudget; render: PanelMessageBudget }
 
 export function createPluginFrameLanes(
   overrides: Partial<PluginFrameLanes> = {}
 ): PluginFrameLanes {
-  return { save: overrides.save ?? createPanelMessageBudget(SAVE_AS_LIMITS) }
+  return {
+    save: overrides.save ?? createPanelMessageBudget(SAVE_AS_LIMITS),
+    render: overrides.render ?? createPanelMessageBudget(RENDER_LIMITS)
+  }
 }
 
-/** Saves carry whole files, so they ride their own lane, not the 64 KiB one. */
+/** Saves carry whole files and trees can be large, so each rides its own lane, not the 64 KiB one. */
 export function pluginFrameLaneFor(
   data: unknown,
   lanes: PluginFrameLanes,
@@ -104,6 +127,9 @@ export function pluginFrameLaneFor(
   }
   if (data.kind === 'req' && data.method === PLUGIN_FRAME_USER_METHODS.saveAs) {
     return lanes.save
+  }
+  if (data.kind === 'evt' && data.event === PLUGIN_DECLARATIVE_MESSAGES.render) {
+    return lanes.render
   }
   return shared
 }

@@ -4,6 +4,7 @@ import { pluginIdSchema, pluginRelativePathSchema } from '../manifest/plugin-man
 import {
   pluginPathFieldDoc,
   pluginFieldDoc,
+  PLUGIN_MANIFEST_V2_SINCE,
   PLUGIN_SCHEMA_SINCE_V1
 } from '../manifest/plugin-schema-field-docs'
 
@@ -51,6 +52,10 @@ export function canonicalPluginPanelIcon(name: string): PluginPanelIconName | nu
   return PANEL_ICON_BY_FOLDED_NAME.get(name.replaceAll('-', '').toLowerCase()) ?? null
 }
 
+export const PLUGIN_PANEL_RUNTIMES = ['frame', 'declarative'] as const
+export type PluginPanelRuntime = (typeof PLUGIN_PANEL_RUNTIMES)[number]
+const DECLARATIVE_PANEL_ENTRY = /\.m?js$/i
+
 export const pluginPanelContributionSchema = z
   .object({
     id: pluginIdSchema.meta(
@@ -77,13 +82,27 @@ export const pluginPanelContributionSchema = z
       ),
     entry: pluginRelativePathSchema.meta(
       pluginPathFieldDoc(
-        'HTML file, relative to the plugin root, rendered inside a panel frame. It is trusted code: install panels you trust.',
+        'File rendered by the panel: an HTML document for `frame`, a `.js`/`.mjs` module for `declarative`. It is trusted code: install panels you trust.',
         PLUGIN_SCHEMA_SINCE_V1,
         ['dist/panel.html']
       )
-    )
+    ),
+    runtime: z
+      .enum(PLUGIN_PANEL_RUNTIMES)
+      .optional()
+      .meta(
+        pluginFieldDoc(
+          'How the panel renders. `frame` (default) shows `entry` as an isolated web page; `declarative` runs `entry` as a hidden module whose TSX tree Orca renders with its own components. `declarative` is experimental: its API may change before 1.0.',
+          PLUGIN_MANIFEST_V2_SINCE,
+          ['declarative']
+        )
+      )
   })
   .strict()
+  .refine((panel) => panel.runtime !== 'declarative' || DECLARATIVE_PANEL_ENTRY.test(panel.entry), {
+    path: ['entry'],
+    message: 'a declarative panel entry must be a .js or .mjs module'
+  })
   .meta({
     id: 'PanelContribution',
     description: 'A sidebar panel. Requires the `sandboxed-ui` execution profile or higher.'

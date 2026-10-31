@@ -12,6 +12,7 @@ export type PluginFrameEntryState =
       sessionToken: string | null
       revision: number
       guest?: PluginFrameGuest
+      runtime?: 'declarative'
     }
 
 /**
@@ -79,7 +80,8 @@ export function usePluginFrameEntry(
             html: result.html,
             sessionToken: result.sessionToken,
             revision,
-            ...(result.guest ? { guest: result.guest } : {})
+            ...(result.guest ? { guest: result.guest } : {}),
+            ...(result.runtime === 'declarative' ? { runtime: 'declarative' as const } : {})
           }
           // Why: a session rotation must not revive a frame the watchdog suspended.
           setEntry((previous) =>
