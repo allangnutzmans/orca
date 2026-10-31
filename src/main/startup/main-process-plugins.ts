@@ -16,6 +16,7 @@ import { isPluginAutoUpdateOn } from '../../shared/plugins/catalog/plugin-update
 import { PluginBundledBootstrapCoordinator } from '../plugins/plugin-bundled-bootstrap-coordinator'
 import { getPluginsDataDir } from '../plugins/plugin-discovery'
 import { resolveBundledPluginRoot } from '../plugins/plugin-bundled-bootstrap'
+import { approveBundledContentPlugins } from '../plugins/plugin-bundled-approval'
 import { resolvePluginHostEntryPath } from '../plugins/workers/plugin-host-process'
 import { applyPluginConsent, applyPluginEnablement } from '../plugins/plugin-enablement'
 import { setPluginServiceForRpc } from '../runtime/rpc/methods/plugins'
@@ -173,7 +174,25 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
     hostVersion: pluginHostVersion(app.getVersion()),
     isEnabled: () => state.store?.getSettings().pluginSystemEnabled === true,
     blockedPluginReason: (pluginKey) => state.pluginKillListService?.reason(pluginKey) ?? null,
-    refreshPlugins: () => state.pluginService?.refresh() ?? Promise.resolve()
+    refreshPlugins: () => state.pluginService?.refresh() ?? Promise.resolve(),
+    approveContentPlugins: async (pluginKeys) => {
+      await pluginService.whenReady()
+      const settings = store.getSettings()
+      await approveBundledContentPlugins({
+        pluginKeys,
+        consents: normalizePluginConsents(settings.pluginConsents),
+        disabledPlugins: normalizePluginIdList(settings.disabledPlugins),
+        findValidPlugin: (pluginKey) => pluginService.findValidPlugin(pluginKey),
+        approve: (pluginKey, reviewedFingerprint) =>
+          applyPluginConsent({
+            store,
+            pluginService,
+            pluginKey,
+            reviewedFingerprint,
+            decision: 'approve'
+          })
+      })
+    }
   })
   const requestBundledPluginBootstrap = (): void => {
     void bundledPluginBootstrap

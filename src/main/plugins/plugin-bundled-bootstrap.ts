@@ -124,6 +124,10 @@ export async function bootstrapBundledPlugins(options: {
   }
   for (const entry of index.plugins) {
     const locked = lock.plugins[entry.pluginKey]
+    // Why: a catalog install or update of the same plugin is the user's choice; never downgrade it.
+    if (locked && locked.source.kind !== 'bundled') {
+      continue
+    }
     if (
       locked?.source.kind === 'bundled' &&
       locked.source.bundleId === entry.pluginKey &&
