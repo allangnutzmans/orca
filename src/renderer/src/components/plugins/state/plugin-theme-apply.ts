@@ -80,6 +80,24 @@ export function terminalThemeUpdate(
   )
 }
 
+/** Puts one just-installed app theme in its mode's slot, as picking it there would. */
+export async function applyPluginAppThemeToSlot(
+  pluginKey: string,
+  pick: Pick<PluginThemeRegistration, 'base' | 'label'>
+): Promise<boolean> {
+  const theme = (await usePluginThemeStore.getState().fetchEntries()).find(
+    (candidate) =>
+      candidate.pluginKey === pluginKey &&
+      candidate.base === pick.base &&
+      candidate.label === pick.label
+  )
+  if (!theme) {
+    return false
+  }
+  await useAppStore.getState().updateSettings(pluginAppThemeSlotUpdate(pick.base, theme.id))
+  return true
+}
+
 /**
  * Applies a plugin's themes right after the user installs or enables it, so the change is
  * visible at once, and offers one click back. Only for clicks; never updates or startup.

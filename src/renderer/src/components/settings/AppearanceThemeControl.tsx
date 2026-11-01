@@ -1,4 +1,5 @@
 import type React from 'react'
+import { Loader2 } from 'lucide-react'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { pluginAppThemeSlotUpdate } from '../../../../shared/plugin-theme-settings'
 import { Button } from '../ui/button'
@@ -8,17 +9,19 @@ import {
   SelectGroup,
   SelectItem,
   SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue
 } from '../ui/select'
 import { SettingsSegmentedControl } from './SettingsFormControls'
 import { translate } from '@/i18n/i18n'
 import { usePluginTerminalThemes, usePluginThemes } from '@/store/plugin-themes'
-import { PluginThemeSwatch } from '../plugins/page/PluginThemeSwatch'
+import { PluginThemeSwatch, ThemeColorSwatch } from '../plugins/page/PluginThemeSwatch'
 import {
   isPluginTerminalThemeSelected,
   terminalThemeUpdate
 } from '../plugins/state/plugin-theme-apply'
+import { useCatalogAppThemes } from './use-catalog-app-themes'
 
 type BuiltInTheme = GlobalSettings['theme']
 
@@ -74,7 +77,9 @@ export function AppearanceThemeSlotSelect({
   settings: GlobalSettings
   updateSettings: (updates: Partial<GlobalSettings>) => void
 }): React.JSX.Element {
-  const themes = usePluginThemes().filter((theme) => theme.base === base)
+  const allThemes = usePluginThemes()
+  const themes = allThemes.filter((theme) => theme.base === base)
+  const catalog = useCatalogAppThemes(base, allThemes)
   const pluginTerminalThemes = usePluginTerminalThemes()
   const selectedId = base === 'dark' ? settings.pluginAppThemeDark : settings.pluginAppThemeLight
   const active = themes.find((theme) => theme.id === selectedId)
@@ -91,11 +96,19 @@ export function AppearanceThemeSlotSelect({
     <div className="flex flex-col items-end gap-1">
       <Select
         value={active?.id ?? BUILT_IN}
-        onValueChange={(value) =>
+        onOpenChange={(open) => {
+          if (open) {
+            catalog.load()
+          }
+        }}
+        onValueChange={(value) => {
+          if (catalog.pick(value)) {
+            return
+          }
           updateSettings(
             pluginAppThemeSlotUpdate(base, themes.find((theme) => theme.id === value)?.id ?? null)
           )
-        }
+        }}
       >
         <SelectTrigger size="sm" className="min-w-[220px]" aria-label={label}>
           <SelectValue />
@@ -118,8 +131,55 @@ export function AppearanceThemeSlotSelect({
               ))}
             </SelectGroup>
           ))}
+          {catalog.themes.length > 0 || catalog.loading ? (
+            <>
+              <SelectSeparator />
+              <SelectGroup>
+                <SelectLabel>
+                  {translate(
+                    'auto.components.settings.AppearanceThemeControl.moreThemes',
+                    'More themes'
+                  )}
+                </SelectLabel>
+                {catalog.loading ? (
+                  <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" />
+                    {translate(
+                      'auto.components.settings.AppearanceThemeControl.moreThemesLoading',
+                      'Loading themes…'
+                    )}
+                  </div>
+                ) : null}
+                {catalog.themes.map((theme) => (
+                  <SelectItem
+                    key={theme.value}
+                    value={theme.value}
+                    disabled={catalog.installing !== null}
+                  >
+                    <ThemeColorSwatch background={theme.background} accent={theme.accent} />
+                    {theme.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </>
+          ) : null}
         </SelectContent>
       </Select>
+      {catalog.installing ? (
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" />
+          {translate(
+            'auto.components.settings.AppearanceThemeControl.installingTheme',
+            'Installing {{value0}}…',
+            { value0: catalog.installing.label }
+          )}
+        </span>
+      ) : null}
+      {catalog.error ? (
+        <span role="alert" className="text-xs text-destructive">
+          {catalog.error}
+        </span>
+      ) : null}
       {terminal && !terminalInUse ? (
         <Button
           variant="link"
