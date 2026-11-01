@@ -216,7 +216,10 @@ test('a multi-file plugin panel runs as an isolated guest with assets by URL', a
       await expect
         .poll(() =>
           electronApp.evaluate(() => {
-            const record: unknown = Reflect.get(globalThis, '__orcaFileChooser')
+            const record: unknown = Object.getOwnPropertyDescriptor(
+              globalThis,
+              '__orcaFileChooser'
+            )?.value
             return Array.isArray(record) && record.includes('Page.fileChooserOpened')
           })
         )
@@ -252,15 +255,16 @@ test.describe('with isolated frames off (the default)', () => {
         .frameLocator(`iframe[title="${TITLE}"]`)
         .locator('html')
         .evaluate(() => {
-          const orca: unknown = Reflect.get(window, 'orca')
-          const read = (key: string): unknown =>
-            typeof orca === 'object' && orca !== null ? Reflect.get(orca, key) : 'missing'
-          const host = read('host')
+          const orca: unknown = 'orca' in window ? window.orca : undefined
+          if (typeof orca !== 'object' || orca === null) {
+            return { shell: 'missing', files: 'missing', hasOpenExternal: 'missing' }
+          }
+          const host = 'host' in orca ? orca.host : undefined
           const has =
-            typeof host === 'object' && host !== null ? Reflect.get(host, 'has') : undefined
+            typeof host === 'object' && host !== null && 'has' in host ? host.has : undefined
           return {
-            shell: typeof read('shell'),
-            files: typeof read('files'),
+            shell: typeof ('shell' in orca ? orca.shell : undefined),
+            files: typeof ('files' in orca ? orca.files : undefined),
             hasOpenExternal: typeof has === 'function' ? has('shell.openExternal') : 'missing'
           }
         })

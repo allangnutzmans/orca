@@ -201,7 +201,8 @@ async function readGuestObserver(
   electronApp: ElectronApplication
 ): Promise<GuestNavigationObservation> {
   const observation: GuestNavigationObservation = await electronApp.evaluate(
-    () => Reflect.get(globalThis, '__orcaGuestProbe')?.observation ?? null
+    () =>
+      Object.getOwnPropertyDescriptor(globalThis, '__orcaGuestProbe')?.value?.observation ?? null
   )
   return observation
 }
@@ -210,7 +211,7 @@ async function stopGuestObserver(
   electronApp: ElectronApplication
 ): Promise<GuestNavigationObservation | null> {
   const observation: GuestNavigationObservation | null = await electronApp.evaluate(() => {
-    const probe = Reflect.get(globalThis, '__orcaGuestProbe')
+    const probe = Object.getOwnPropertyDescriptor(globalThis, '__orcaGuestProbe')?.value
     probe?.dispose()
     Reflect.deleteProperty(globalThis, '__orcaGuestProbe')
     return probe?.observation ?? null

@@ -161,7 +161,8 @@ export class PluginPanelController {
 
   private readAction(call: unknown): string {
     try {
-      const action = typeof call === 'object' && call !== null ? Reflect.get(call, 'action') : null
+      const action =
+        typeof call === 'object' && call !== null && 'action' in call ? call.action : null
       return typeof action === 'string' ? action : ''
     } catch {
       return ''
