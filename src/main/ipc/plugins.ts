@@ -264,13 +264,6 @@ export function registerPluginHandlers(
     if (!canRemoveInstalledPlugin(pluginService, parsed.pluginKey, lock)) {
       throw new Error(`cannot remove protected or non-installed plugin ${parsed.pluginKey}`)
     }
-    await pluginService.removePlugin(parsed.pluginKey, () =>
-      removeInstalledPlugin({
-        pluginsDir,
-        pluginsDataDir: getPluginsDataDir(pluginService.options.userDataPath),
-        pluginKey: parsed.pluginKey
-      })
-    )
     // Why: Orca republishes a copy it ships on the next launch; it must come back off, not on.
     const shipped = await isBundledPluginKey(
       resolveBundledPluginRoot({
@@ -279,6 +272,13 @@ export function registerPluginHandlers(
         appPath: app.getAppPath()
       }),
       parsed.pluginKey
+    )
+    await pluginService.removePlugin(parsed.pluginKey, () =>
+      removeInstalledPlugin({
+        pluginsDir,
+        pluginsDataDir: getPluginsDataDir(pluginService.options.userDataPath),
+        pluginKey: parsed.pluginKey
+      })
     )
     const settings = store.getSettings()
     const consents = { ...settings.pluginConsents }
