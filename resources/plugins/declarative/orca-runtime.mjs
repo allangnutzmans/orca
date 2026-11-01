@@ -418,8 +418,7 @@ function createOrcaDeclarativeRuntime(options) {
       }
     },
     on(event, handler) {
-      return bridge?.on ? bridge.on(event, handler) : { dispose() {
-      } };
+      return bridge?.on ? bridge.on(event, handler) : { dispose: () => void 0 };
     },
     dispose() {
       component = null;
@@ -485,8 +484,7 @@ function on(event, handler) {
   if (runtime) {
     return runtime.on(event, handler);
   }
-  return globalBridge()?.on?.(event, handler) ?? { dispose() {
-  } };
+  return globalBridge()?.on?.(event, handler) ?? { dispose: () => void 0 };
 }
 function theme() {
   return runtime ? runtime.theme() : { colorScheme: documentColorScheme() ?? "dark" };

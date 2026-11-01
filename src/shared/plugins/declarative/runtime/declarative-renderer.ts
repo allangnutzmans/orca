@@ -269,7 +269,7 @@ export function createOrcaDeclarativeRuntime(options: OrcaRuntimeOptions): OrcaD
       }
     },
     on(event, handler) {
-      return bridge?.on ? bridge.on(event, handler) : { dispose() {} }
+      return bridge?.on ? bridge.on(event, handler) : { dispose: () => undefined }
     },
     dispose() {
       component = null

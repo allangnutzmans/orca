@@ -87,7 +87,7 @@ export function on(event: string, handler: (payload: unknown) => void): OrcaDisp
   if (runtime) {
     return runtime.on(event, handler)
   }
-  return globalBridge()?.on?.(event, handler) ?? { dispose() {} }
+  return globalBridge()?.on?.(event, handler) ?? { dispose: () => undefined }
 }
 
 /** Reading the theme during render re-renders on light/dark switches. */
