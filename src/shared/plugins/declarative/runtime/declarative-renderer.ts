@@ -56,8 +56,28 @@ function errorMessage(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).slice(0, 4096)
 }
 
-function field(payload: unknown, name: string): unknown {
-  return typeof payload === 'object' && payload !== null ? Reflect.get(payload, name) : undefined
+/** The host messages' fields, still unvalidated; each reader checks the ones it uses. */
+type HostMessageFields = {
+  revision?: unknown
+  callback?: unknown
+  args?: unknown
+  accepted?: unknown
+  retryAfterMs?: unknown
+  colorScheme?: unknown
+}
+
+function readHostMessage(payload: unknown): HostMessageFields {
+  if (typeof payload !== 'object' || payload === null) {
+    return {}
+  }
+  return {
+    revision: 'revision' in payload ? payload.revision : undefined,
+    callback: 'callback' in payload ? payload.callback : undefined,
+    args: 'args' in payload ? payload.args : undefined,
+    accepted: 'accepted' in payload ? payload.accepted : undefined,
+    retryAfterMs: 'retryAfterMs' in payload ? payload.retryAfterMs : undefined,
+    colorScheme: 'colorScheme' in payload ? payload.colorScheme : undefined
+  }
 }
 
 function defaultSchedule(flush: () => void, delayMs: number): void {
@@ -148,9 +168,7 @@ export function createOrcaDeclarativeRuntime(options: OrcaRuntimeOptions): OrcaD
   }
 
   function dispatchEvent(payload: unknown): boolean {
-    const eventRevision = field(payload, 'revision')
-    const callbackId = field(payload, 'callback')
-    const args = field(payload, 'args')
+    const { revision: eventRevision, callback: callbackId, args } = readHostMessage(payload)
     if (typeof callbackId !== 'string') {
       return false
     }
@@ -174,11 +192,12 @@ export function createOrcaDeclarativeRuntime(options: OrcaRuntimeOptions): OrcaD
   }
 
   function acknowledge(payload: unknown): void {
-    const acked = field(payload, 'revision')
+    const message = readHostMessage(payload)
+    const acked = message.revision
     if (typeof acked !== 'number' || !renders.has(acked)) {
       return
     }
-    if (field(payload, 'accepted') === true) {
+    if (message.accepted === true) {
       accepted = acked
       for (const kept of renders.keys()) {
         if (kept < acked) {
@@ -189,7 +208,7 @@ export function createOrcaDeclarativeRuntime(options: OrcaRuntimeOptions): OrcaD
     }
     // A refused render never reached the screen; events keep resolving against the accepted one.
     renders.delete(acked)
-    const retryAfterMs = field(payload, 'retryAfterMs')
+    const retryAfterMs = message.retryAfterMs
     if (typeof retryAfterMs === 'number' && acked === revision) {
       invalidate(retryAfterMs)
     }
@@ -200,7 +219,7 @@ export function createOrcaDeclarativeRuntime(options: OrcaRuntimeOptions): OrcaD
         bridge.on(PLUGIN_DECLARATIVE_MESSAGES.event, dispatchEvent),
         bridge.on(PLUGIN_DECLARATIVE_MESSAGES.ack, acknowledge),
         bridge.on('theme', (payload) => {
-          const colorScheme = field(payload, 'colorScheme')
+          const { colorScheme } = readHostMessage(payload)
           if (colorScheme === 'light' || colorScheme === 'dark') {
             const next: OrcaTheme = { colorScheme }
             update(themeAtom, (previous) =>

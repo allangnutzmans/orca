@@ -29,7 +29,8 @@ export function buildPluginDeclarativeHostBody(entry: string): string {
     `const report = (error) => post(${scriptJson(PLUGIN_DECLARATIVE_MESSAGES.error)}, ` +
     '{ revision: 0, message: String((error && error.message) || error).slice(0, 4096) })\n' +
     'try {\n' +
-    "  const runtime = (await import('orca')).installOrcaDeclarativeRuntime({ post })\n" +
+    // Why the URL, not `orca`: the same module instance, and no bare specifier in main's bundle.
+    `  const runtime = (await import(${scriptJson(RUNTIME_PATH)})).installOrcaDeclarativeRuntime({ post })\n` +
     `  const module = await import(${scriptJson(entryPath)})\n` +
     "  if (typeof module.default === 'function') runtime.mount(module.default)\n" +
     '  else if (!runtime.mounted()) throw new Error(' +

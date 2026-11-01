@@ -9,7 +9,7 @@ import { PluginDeclarativeView } from './PluginDeclarativeView'
 afterEach(cleanup)
 
 const cb = (id: string) => ({ $callback: id })
-const node = (type: string, props: object = {}, children: unknown[] = []) => ({
+const node = (type: string, props: Record<string, unknown> = {}, children: unknown[] = []) => ({
   type,
   props,
   children

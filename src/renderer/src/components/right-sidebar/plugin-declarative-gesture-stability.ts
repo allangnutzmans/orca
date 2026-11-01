@@ -39,9 +39,12 @@ function signatureOf(node: PluginDeclarativeNode, path: string): string {
 }
 
 function callbackOf(node: PluginDeclarativeNode): string | null {
-  const onPress: unknown = Reflect.get(node.props, 'onPress')
+  const props: object = node.props
+  const onPress: unknown = 'onPress' in props ? props.onPress : undefined
   const id: unknown =
-    typeof onPress === 'object' && onPress !== null ? Reflect.get(onPress, '$callback') : null
+    typeof onPress === 'object' && onPress !== null && '$callback' in onPress
+      ? onPress.$callback
+      : null
   return typeof id === 'string' ? id : null
 }
 

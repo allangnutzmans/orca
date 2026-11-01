@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterAll, expect, it } from 'vitest'
+import { pluginDeclarativeRenderPayloadSchema } from './plugin-declarative-messages'
 import { parsePluginDeclarativeTree } from './plugin-declarative-tree'
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..', '..', '..')
@@ -69,7 +70,9 @@ it('draws a component created by name with h() as a placeholder when Orca does n
   })
   expect(orca.ui.version).toBeGreaterThanOrEqual(1)
   runtime.mount(() => orca.h('Stack', null, orca.h('Carousel', { label: 'Shots' }), 'rest'))
-  const tree = parsePluginDeclarativeTree(Reflect.get(Object(posted.at(-1)), 'tree'))
+  const tree = parsePluginDeclarativeTree(
+    pluginDeclarativeRenderPayloadSchema.parse(posted.at(-1)).tree
+  )
   expect(tree.ok && tree.tree?.children).toEqual([
     { type: 'Unsupported', key: '#0', props: { name: 'Carousel' }, children: [] },
     'rest'

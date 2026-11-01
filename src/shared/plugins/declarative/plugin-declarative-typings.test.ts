@@ -105,7 +105,7 @@ type ShapeEntry = {
 function enumOptions(schema: ShapeEntry): string[] | null {
   const inner: unknown = schema.unwrap ? schema.unwrap() : schema
   const options: unknown =
-    typeof inner === 'object' && inner !== null ? Reflect.get(inner, 'options') : undefined
+    typeof inner === 'object' && inner !== null && 'options' in inner ? inner.options : undefined
   return Array.isArray(options) && options.every((option) => typeof option === 'string')
     ? options
     : null

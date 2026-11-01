@@ -58,7 +58,9 @@ export function parsePluginDeclarativeRender(payload: unknown): PluginDeclarativ
 /** Revision of a `ui.render` refused before parsing (e.g. rate-limited), when readable. */
 export function pluginDeclarativeRenderRevision(payload: unknown): number | null {
   const revision: unknown =
-    typeof payload === 'object' && payload !== null ? Reflect.get(payload, 'revision') : undefined
+    typeof payload === 'object' && payload !== null && 'revision' in payload
+      ? payload.revision
+      : undefined
   return revisionSchema.safeParse(revision).success && typeof revision === 'number'
     ? revision
     : null

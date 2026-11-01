@@ -8,7 +8,7 @@ import {
 } from './plugin-declarative-messages'
 import { parsePluginDeclarativeTree } from './plugin-declarative-tree'
 
-const node = (type: string, props: object = {}, children: unknown[] = []) => ({
+const node = (type: string, props: Record<string, unknown> = {}, children: unknown[] = []) => ({
   type,
   props,
   children

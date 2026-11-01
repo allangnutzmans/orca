@@ -123,8 +123,8 @@ export function usePluginDeclarativeTree(
       },
       onRefused: (message, retryAfterMs) => {
         const payload: unknown =
-          typeof message === 'object' && message !== null
-            ? Reflect.get(message, 'payload')
+          typeof message === 'object' && message !== null && 'payload' in message
+            ? message.payload
             : undefined
         const revision = pluginDeclarativeRenderRevision(payload)
         if (revision !== null) {

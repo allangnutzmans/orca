@@ -17,7 +17,10 @@ export type OrcaElement = {
 
 export function isOrcaElement(value: unknown): value is OrcaElement {
   return (
-    typeof value === 'object' && value !== null && Reflect.get(value, '$$typeof') === ORCA_ELEMENT
+    typeof value === 'object' &&
+    value !== null &&
+    '$$typeof' in value &&
+    value.$$typeof === ORCA_ELEMENT
   )
 }
 

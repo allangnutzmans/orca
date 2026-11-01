@@ -1,11 +1,27 @@
 import { describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 import { atom, read, update } from './declarative-atoms'
 import { Fragment, h, jsx } from './declarative-elements'
 import { createOrcaDeclarativeRuntime, type OrcaBridge } from './declarative-renderer'
 import { parsePluginDeclarativeTree } from '../plugin-declarative-tree'
 
 type Posted = { event: string; payload: unknown }
-type WireNode = { type: string; key: string; props: Record<string, unknown>; children: unknown[] }
+type WireNode = {
+  type: string
+  key: string
+  props: Record<string, unknown>
+  children: (WireNode | string)[]
+}
+const wireNodeSchema: z.ZodType<WireNode> = z.lazy(() =>
+  z.object({
+    type: z.string(),
+    key: z.string(),
+    props: z.record(z.string(), z.unknown()),
+    children: z.array(z.union([z.string(), wireNodeSchema]))
+  })
+)
+const renderSchema = z.object({ revision: z.number(), tree: wireNodeSchema })
+const callbackRefSchema = z.object({ $callback: z.string() })
 
 function setup(bridge?: OrcaBridge) {
   const posted: Posted[] = []
@@ -17,16 +33,16 @@ function setup(bridge?: OrcaBridge) {
   })
   const drain = () => queue.splice(0).forEach(({ flush }) => flush())
   const last = () => posted.at(-1)?.payload
-  const tree = (): WireNode => Reflect.get(Object(last()), 'tree')
+  const tree = (): WireNode => renderSchema.parse(last()).tree
   return { runtime, posted, queue, drain, last, tree }
 }
 
 function callbackAt(node: WireNode, prop: string, ...path: number[]): string {
-  let current: unknown = node
+  let current = node
   for (const index of path) {
-    current = Reflect.get(Object(current), 'children')[index]
+    current = wireNodeSchema.parse(current.children[index])
   }
-  return Reflect.get(Reflect.get(Object(current), 'props')[prop], '$callback')
+  return callbackRefSchema.parse(current.props[prop]).$callback
 }
 
 describe('declarative runtime', () => {
@@ -83,11 +99,9 @@ describe('declarative runtime', () => {
         h(Fragment, null, 'x')
       )
     )
-    expect(tree().children.map((child) => Reflect.get(Object(child), 'key'))).toEqual([
-      '#0.a',
-      '#0.b',
-      undefined
-    ])
+    expect(
+      tree().children.map((child) => (typeof child === 'string' ? undefined : child.key))
+    ).toEqual(['#0.a', '#0.b', undefined])
   })
 
   it('rejects duplicate sibling keys without committing', () => {
@@ -134,7 +148,7 @@ describe('declarative runtime', () => {
     expect(onA).toHaveBeenCalledOnce()
     expect(queue.at(-1)?.delayMs).toBeGreaterThanOrEqual(250)
     drain()
-    expect(Reflect.get(Object(tree()), 'children')).toEqual(['b'])
+    expect(tree().children).toEqual(['b'])
     runtime.acknowledge({ revision: 3, accepted: true })
     expect(runtime.dispatchEvent({ revision: 1, callback: id, args: [] })).toBe(false)
   })

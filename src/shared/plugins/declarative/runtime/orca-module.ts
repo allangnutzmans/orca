@@ -26,12 +26,13 @@ let pendingMount: OrcaComponent | null = null
 
 function isOrcaBridge(value: unknown): value is OrcaBridge {
   return (
-    typeof value === 'object' && value !== null && typeof Reflect.get(value, 'on') === 'function'
+    typeof value === 'object' && value !== null && 'on' in value && typeof value.on === 'function'
   )
 }
 
 function globalBridge(): OrcaBridge | null {
-  const candidate: unknown = Reflect.get(globalThis, 'orca')
+  const scope: object = globalThis
+  const candidate: unknown = 'orca' in scope ? scope.orca : undefined
   return isOrcaBridge(candidate) ? candidate : null
 }
 

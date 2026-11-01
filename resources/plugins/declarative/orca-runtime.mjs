@@ -71,7 +71,7 @@ function trackAtomReads(reads, render) {
 var ORCA_ELEMENT = /* @__PURE__ */ Symbol.for("orca.declarative.element");
 var Fragment = /* @__PURE__ */ Symbol.for("orca.declarative.fragment");
 function isOrcaElement(value) {
-  return typeof value === "object" && value !== null && Reflect.get(value, "$$typeof") === ORCA_ELEMENT;
+  return typeof value === "object" && value !== null && "$$typeof" in value && value.$$typeof === ORCA_ELEMENT;
 }
 function createElement(type, props, key) {
   return Object.freeze({
@@ -237,8 +237,18 @@ var MAX_RETAINED_RENDERS = 32;
 function errorMessage(error) {
   return (error instanceof Error ? error.message : String(error)).slice(0, 4096);
 }
-function field(payload, name) {
-  return typeof payload === "object" && payload !== null ? Reflect.get(payload, name) : void 0;
+function readHostMessage(payload) {
+  if (typeof payload !== "object" || payload === null) {
+    return {};
+  }
+  return {
+    revision: "revision" in payload ? payload.revision : void 0,
+    callback: "callback" in payload ? payload.callback : void 0,
+    args: "args" in payload ? payload.args : void 0,
+    accepted: "accepted" in payload ? payload.accepted : void 0,
+    retryAfterMs: "retryAfterMs" in payload ? payload.retryAfterMs : void 0,
+    colorScheme: "colorScheme" in payload ? payload.colorScheme : void 0
+  };
 }
 function defaultSchedule(flush, delayMs) {
   if (delayMs > 0) {
@@ -319,9 +329,7 @@ function createOrcaDeclarativeRuntime(options) {
     post(PLUGIN_DECLARATIVE_MESSAGES.render, { revision, tree: evaluation.tree });
   }
   function dispatchEvent(payload) {
-    const eventRevision = field(payload, "revision");
-    const callbackId = field(payload, "callback");
-    const args = field(payload, "args");
+    const { revision: eventRevision, callback: callbackId, args } = readHostMessage(payload);
     if (typeof callbackId !== "string") {
       return false;
     }
@@ -340,11 +348,12 @@ function createOrcaDeclarativeRuntime(options) {
     return true;
   }
   function acknowledge(payload) {
-    const acked = field(payload, "revision");
+    const message = readHostMessage(payload);
+    const acked = message.revision;
     if (typeof acked !== "number" || !renders.has(acked)) {
       return;
     }
-    if (field(payload, "accepted") === true) {
+    if (message.accepted === true) {
       accepted = acked;
       for (const kept of renders.keys()) {
         if (kept < acked) {
@@ -354,7 +363,7 @@ function createOrcaDeclarativeRuntime(options) {
       return;
     }
     renders.delete(acked);
-    const retryAfterMs = field(payload, "retryAfterMs");
+    const retryAfterMs = message.retryAfterMs;
     if (typeof retryAfterMs === "number" && acked === revision) {
       invalidate(retryAfterMs);
     }
@@ -363,7 +372,7 @@ function createOrcaDeclarativeRuntime(options) {
     bridge.on(PLUGIN_DECLARATIVE_MESSAGES.event, dispatchEvent),
     bridge.on(PLUGIN_DECLARATIVE_MESSAGES.ack, acknowledge),
     bridge.on("theme", (payload) => {
-      const colorScheme = field(payload, "colorScheme");
+      const { colorScheme } = readHostMessage(payload);
       if (colorScheme === "light" || colorScheme === "dark") {
         const next = { colorScheme };
         update(
@@ -428,10 +437,11 @@ var ui = Object.freeze({ version: PLUGIN_DECLARATIVE_CATALOG_VERSION });
 var runtime = null;
 var pendingMount = null;
 function isOrcaBridge(value) {
-  return typeof value === "object" && value !== null && typeof Reflect.get(value, "on") === "function";
+  return typeof value === "object" && value !== null && "on" in value && typeof value.on === "function";
 }
 function globalBridge() {
-  const candidate = Reflect.get(globalThis, "orca");
+  const scope = globalThis;
+  const candidate = "orca" in scope ? scope.orca : void 0;
   return isOrcaBridge(candidate) ? candidate : null;
 }
 function documentColorScheme() {
