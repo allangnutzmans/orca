@@ -2,8 +2,8 @@
 
 import { expect, it } from 'vitest'
 import { z } from 'zod'
-import { AGENT_SESSION_JOURNAL_SCHEMA_VERSION } from '../../../shared/agent-session-journal-types'
-import { AgentJournalItemBodySchema } from '../../../shared/agent-session-journal-schemas'
+import { AGENT_SESSION_JOURNAL_SCHEMA_VERSION } from '../../../shared/agent-session/journal/agent-session-journal-types'
+import { AgentJournalItemBodySchema } from '../../../shared/agent-session/journal/agent-session-journal-schemas'
 import { KNOWN_MUTATION_KINDS, KNOWN_ROW_KINDS } from './journal-row-schema'
 
 type ClosedValue = string | number | boolean | null
