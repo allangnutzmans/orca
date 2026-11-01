@@ -1,11 +1,12 @@
 import { pluginThemeSettingsAfterRemoval } from '../../shared/plugin-theme-settings'
-import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { app, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { z } from 'zod'
 import type { Store } from '../persistence'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import type { PluginFrameEntry } from '../../shared/plugins/frames/plugin-frame-bridge'
 import type { PluginHostCallOutcome } from '../../shared/plugins/frames/plugin-protocol'
 import { getUserPluginsDir, getPluginsDataDir } from '../plugins/plugin-discovery'
+import { isBundledPluginKey, resolveBundledPluginRoot } from '../plugins/plugin-bundled-bootstrap'
 import {
   installPluginFromGit,
   installPluginFromLocalPath,
@@ -270,12 +271,24 @@ export function registerPluginHandlers(
         pluginKey: parsed.pluginKey
       })
     )
+    // Why: Orca republishes a copy it ships on the next launch; it must come back off, not on.
+    const shipped = await isBundledPluginKey(
+      resolveBundledPluginRoot({
+        isPackaged: app.isPackaged,
+        resourcesPath: process.resourcesPath,
+        appPath: app.getAppPath()
+      }),
+      parsed.pluginKey
+    )
     const settings = store.getSettings()
     const consents = { ...settings.pluginConsents }
     delete consents[parsed.pluginKey]
-    const disabledPlugins = normalizePluginIdList(settings.disabledPlugins).filter(
-      (pluginKey) => pluginKey !== parsed.pluginKey
-    )
+    const disabledPlugins = [
+      ...normalizePluginIdList(settings.disabledPlugins).filter(
+        (pluginKey) => pluginKey !== parsed.pluginKey
+      ),
+      ...(shipped ? [parsed.pluginKey] : [])
+    ]
     store.updateSettings(
       {
         pluginConsents: consents,

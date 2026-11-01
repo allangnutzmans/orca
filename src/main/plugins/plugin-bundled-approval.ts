@@ -7,25 +7,34 @@ import type { ValidDiscoveredPlugin } from './plugin-discovery'
  */
 export async function approveBundledContentPlugins(input: {
   pluginKeys: readonly string[]
-  consents: Readonly<Record<string, string>>
-  disabledPlugins: readonly string[]
+  /** Read per plugin, so a switch-off made while another is approved still counts. */
+  readConsentState: () => {
+    consents: Readonly<Record<string, string>>
+    disabledPlugins: readonly string[]
+  }
   findValidPlugin: (pluginKey: string) => ValidDiscoveredPlugin | null
   approve: (pluginKey: string, reviewedFingerprint: string) => Promise<void>
 }): Promise<void> {
   for (const pluginKey of input.pluginKeys) {
     const plugin = input.findValidPlugin(pluginKey)
+    const { consents, disabledPlugins } = input.readConsentState()
     if (
       !plugin ||
-      input.disabledPlugins.includes(pluginKey) ||
-      input.consents[pluginKey] === plugin.consentFingerprint
+      disabledPlugins.includes(pluginKey) ||
+      consents[pluginKey] === plugin.consentFingerprint
     ) {
       continue
     }
-    await enableIfDataPlugin({
-      pluginKey,
-      installedFingerprint: plugin.consentFingerprint,
-      findValidPlugin: input.findValidPlugin,
-      approve: input.approve
-    })
+    try {
+      await enableIfDataPlugin({
+        pluginKey,
+        installedFingerprint: plugin.consentFingerprint,
+        findValidPlugin: input.findValidPlugin,
+        approve: input.approve
+      })
+    } catch (error) {
+      // Why per plugin: one refused approval must not leave the other shipped plugins off.
+      console.warn(`[plugins] failed to turn on bundled ${pluginKey}:`, error)
+    }
   }
 }

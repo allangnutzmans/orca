@@ -98,7 +98,7 @@ export function AppearanceThemeSlotSelect({
         value={active?.id ?? BUILT_IN}
         onOpenChange={(open) => {
           if (open) {
-            catalog.load()
+            catalog.open()
           }
         }}
         onValueChange={(value) => {

@@ -177,11 +177,15 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
     refreshPlugins: () => state.pluginService?.refresh() ?? Promise.resolve(),
     approveContentPlugins: async (pluginKeys) => {
       await pluginService.whenReady()
-      const settings = store.getSettings()
       await approveBundledContentPlugins({
         pluginKeys,
-        consents: normalizePluginConsents(settings.pluginConsents),
-        disabledPlugins: normalizePluginIdList(settings.disabledPlugins),
+        readConsentState: () => {
+          const settings = store.getSettings()
+          return {
+            consents: normalizePluginConsents(settings.pluginConsents),
+            disabledPlugins: normalizePluginIdList(settings.disabledPlugins)
+          }
+        },
         findValidPlugin: (pluginKey) => pluginService.findValidPlugin(pluginKey),
         approve: (pluginKey, reviewedFingerprint) =>
           applyPluginConsent({

@@ -82,8 +82,13 @@ export async function installBundledPlugin(input: {
   expectedPluginKey: string
   blockedPluginReason?: (pluginKey: string) => string | null
 }): Promise<PluginInstallResult> {
-  return serializePluginMutation(input.pluginsDir, () =>
-    installStagedPluginTree({
+  return serializePluginMutation(input.pluginsDir, async () => {
+    const locked = (await readPluginLockfile(input.pluginsDir)).plugins[input.expectedPluginKey]
+    // Why inside the queue: a catalog install that just finished must not be downgraded.
+    if (locked && locked.source.kind !== 'bundled') {
+      return { ok: false, error: 'a catalog install of this plugin is kept' }
+    }
+    return installStagedPluginTree({
       pluginsDir: input.pluginsDir,
       stagingDir: input.sourcePath,
       hostVersion: input.hostVersion,
@@ -93,7 +98,7 @@ export async function installBundledPlugin(input: {
       repairCorruptedVersion: true,
       blockedPluginReason: input.blockedPluginReason
     })
-  )
+  })
 }
 
 export async function installPluginFromGit(input: {

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import type {
   PluginHostListEntry,
   PluginMarketplaceHostListing
@@ -47,16 +47,20 @@ export function catalogAppThemes(
       ) {
         return []
       }
-      return (release.themePreview ?? [])
-        .filter((preview) => preview.base === base)
-        .map((preview) => ({
-          value: `catalog:${entry.pluginKey}:${preview.label}`,
-          label: preview.label,
-          background: preview.background,
-          accent: preview.accent,
-          pluginName: entry.name,
-          listing
-        }))
+      return (release.themePreview ?? []).flatMap((preview, index) =>
+        preview.base === base
+          ? [
+              {
+                value: `catalog:${entry.pluginKey}:${index}`,
+                label: preview.label,
+                background: preview.background,
+                accent: preview.accent,
+                pluginName: entry.name,
+                listing
+              }
+            ]
+          : []
+      )
     })
     .sort((left, right) => left.label.localeCompare(right.label))
 }
@@ -108,16 +112,21 @@ export function useCatalogAppThemes(
   themes: CatalogAppTheme[]
   /** True only for the first read; later reads keep showing what is known. */
   loading: boolean
-  load: () => void
+  /** Reads the catalog again and clears a failed pick's message. */
+  open: () => void
   /** Starts installing the theme a select value names; false when it names none. */
   pick: (value: string) => boolean
   installing: CatalogAppTheme | null
   error: string | null
 } {
   const { snapshot, loading, load } = useCatalogSnapshot()
-  const themes = snapshot
-    ? catalogAppThemes(snapshot, base, new Set(installedThemes.map((theme) => theme.pluginKey)))
-    : []
+  const themes = useMemo(
+    () =>
+      snapshot
+        ? catalogAppThemes(snapshot, base, new Set(installedThemes.map((theme) => theme.pluginKey)))
+        : [],
+    [snapshot, base, installedThemes]
+  )
   const [picked, setPicked] = useState<CatalogAppTheme | null>(null)
   // Why a ref: the install started in the same event reads the pick before it is state.
   const pickedRef = useRef<CatalogAppTheme | null>(null)
@@ -138,9 +147,18 @@ export function useCatalogAppThemes(
   )
   const install = usePluginInstallAction({ fetchPreview, onInstalled, applyThemes })
   const phase = picked ? install.phaseOf(picked.listing.pluginKey) : null
+  // Why: reopening the picker is the retry, so a failed pick's message goes with it.
+  const open = (): void => {
+    if (picked && phase?.kind === 'error') {
+      install.dismiss(picked.listing.pluginKey)
+    }
+    load()
+  }
   const pick = (value: string): boolean => {
     const theme = themes.find((candidate) => candidate.value === value)
     if (!theme) {
+      // Why: a later choice wins over a catalog pick still downloading.
+      pickedRef.current = null
       return false
     }
     pickedRef.current = theme
@@ -151,7 +169,7 @@ export function useCatalogAppThemes(
   return {
     themes,
     loading: loading && !snapshot,
-    load,
+    open,
     pick,
     installing: phase?.kind === 'installing' ? picked : null,
     error: phase?.kind === 'error' ? phase.message : null
