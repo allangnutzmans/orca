@@ -35,7 +35,7 @@ export async function waitForGuestReady(guest: Locator): Promise<void> {
 }
 
 /** Focuses `selector` inside the guest so real keyboard input from the page reaches it. */
-export async function focusInGuest(page: Page, guest: Locator, selector: string): Promise<void> {
+export async function focusInGuest(guest: Locator, selector: string): Promise<void> {
   await guest.evaluate((webview: Electron.WebviewTag) => webview.focus())
   const target = `document.querySelector(${JSON.stringify(selector)})`
   await evalInGuest(guest, `${target}.focus()`)

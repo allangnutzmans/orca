@@ -97,7 +97,7 @@ test('plugin custom editor edits and saves through Orca', async ({ orcaPage, see
     expect(await activeFileDirty(orcaPage)).toBe(false)
 
     // Real input: the save chord only counts with the frame's own user activation.
-    await focusInGuest(orcaPage, guest, '#doc')
+    await focusInGuest(guest, '#doc')
     await orcaPage.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowDown' : 'Control+End')
     await orcaPage.keyboard.type('second line')
     await expect.poll(() => activeFileDirty(orcaPage)).toBe(true)
@@ -207,7 +207,7 @@ test('a bytes custom editor edits and saves a binary file', async ({
     expect(await dirty()).toBe(false)
 
     // Why a key: in a hidden Linux window the mouse never reaches a sandboxed frame's button.
-    await focusInGuest(orcaPage, guest, '#append')
+    await focusInGuest(guest, '#append')
     await orcaPage.keyboard.press('Enter')
     await expect.poll(dirty).toBe(true)
     await orcaPage.keyboard.press(SAVE_KEY)
