@@ -93,6 +93,11 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
     blockedPluginReason: (pluginKey) => state.pluginKillListService?.reason(pluginKey) ?? null,
     imageCache: pluginImageCache
   })
+  const bundledPluginRoot = resolveBundledPluginRoot({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath()
+  })
   state.pluginService = new PluginService({
     userDataPath: app.getPath('userData'),
     hostVersion: pluginHostVersion(app.getVersion()),
@@ -104,7 +109,8 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
     getDevPluginPaths: () => normalizePluginIdList(state.store?.getSettings().devPluginPaths),
     getKeybindings: () => state.keybindings?.getOverrides() ?? {},
     getPluginKillListEntry: (pluginKey) => state.pluginKillListService?.find(pluginKey) ?? null,
-    hostEntryPath: resolvePluginHostEntryPath(app.getAppPath(), app.isPackaged)
+    hostEntryPath: resolvePluginHostEntryPath(app.getAppPath(), app.isPackaged),
+    bundledPluginRoot
   })
   const pluginService = state.pluginService
   const pluginAutoUpdater = new PluginAutoUpdater({
@@ -165,11 +171,7 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
     findValidPlugin: (pluginKey) => state.pluginService?.findValidPlugin(pluginKey) ?? null
   })
   const bundledPluginBootstrap = new PluginBundledBootstrapCoordinator({
-    root: resolveBundledPluginRoot({
-      isPackaged: app.isPackaged,
-      resourcesPath: process.resourcesPath,
-      appPath: app.getAppPath()
-    }),
+    root: bundledPluginRoot,
     userDataPath: app.getPath('userData'),
     hostVersion: pluginHostVersion(app.getVersion()),
     isEnabled: () => state.store?.getSettings().pluginSystemEnabled === true,
