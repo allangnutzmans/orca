@@ -212,7 +212,7 @@ test('a multi-file plugin panel runs as an isolated guest with assets by URL', a
       await contents.debugger.sendCommand('Page.setInterceptFileChooserDialog', { enabled: true })
     }, guestId)
     try {
-      await clickInGuest(orcaPage, guest, '#pick')
+      await clickInGuest(guest, '#pick')
       await expect
         .poll(() =>
           electronApp.evaluate(() => {

@@ -328,7 +328,7 @@ test('contains hostile panel network and navigation probes', async ({
     expect(orcaPage.url()).toBe(appUrl)
 
     // Bridge budgets on the guest path: oversized and flooded calls get real refusals.
-    await clickInGuest(orcaPage, guest, '#bridge')
+    await clickInGuest(guest, '#bridge')
     for (const probe of ['oversized-message', 'message-flood']) {
       await expect
         .poll(() =>
@@ -397,7 +397,14 @@ test('shell.openExternal from a panel needs a real gesture in the guest', async 
         document.body.appendChild(button)
       })()`
     )
-    await clickInGuest(orcaPage, guest, '#open-external')
+    // A scripted click is not a gesture: the same handler must be refused.
+    await evalInGuest(guest, `document.getElementById('open-external').click()`)
+    await expect
+      .poll(() => readInGuest<string | null>(guest, 'window.__openExternal ?? null'))
+      .toBe('not_permitted')
+    expect((await readGuestObserver(electronApp)).externalUrls).toEqual([])
+    await evalInGuest(guest, 'window.__openExternal = null')
+    await clickInGuest(guest, '#open-external')
     await expect
       .poll(() => readInGuest<string | null>(guest, 'window.__openExternal ?? null'))
       .toBe('opened')

@@ -16,22 +16,25 @@ export async function evalInGuest<T>(guest: Locator, source: string): Promise<T>
   return result
 }
 
-/** Resolves once the guest's document has finished its first load. */
+/**
+ * Resolves once the guest's document has finished loading. Polled, not event-driven: the panel can
+ * remount its webview while this waits, and a listener on the old element would never fire.
+ */
 export async function waitForGuestReady(guest: Locator): Promise<void> {
-  await guest.evaluate(
-    (webview: Electron.WebviewTag) =>
-      new Promise<void>((resolve) => {
-        try {
-          if (!webview.isLoading() && webview.getURL()) {
-            resolve()
-            return
+  await expect
+    .poll(
+      () =>
+        guest.evaluate((webview: Electron.WebviewTag) => {
+          try {
+            return !webview.isLoading() && webview.getURL() !== ''
+          } catch {
+            // Not attached yet.
+            return false
           }
-        } catch {
-          // Not attached yet: wait for its first dom-ready.
-        }
-        webview.addEventListener('dom-ready', () => resolve())
-      })
-  )
+        }),
+      { timeout: 15_000 }
+    )
+    .toBe(true)
 }
 
 /** Focuses `selector` inside the guest so real keyboard input from the page reaches it. */
@@ -49,33 +52,25 @@ export async function focusInGuest(guest: Locator, selector: string): Promise<vo
     .toBe(true)
 }
 
-/** Clicks `selector` inside the guest with real (trusted, activating) mouse input. */
-export async function clickInGuest(page: Page, guest: Locator, selector: string): Promise<void> {
-  const box = await guest.boundingBox()
-  if (!box) {
-    throw new Error('plugin guest has no bounds')
-  }
+/**
+ * Clicks `selector` with real (trusted, activating) mouse input delivered to the guest's own
+ * WebContents. Why not page.mouse: on Linux headless (xvfb) host-window clicks never reach a
+ * <webview> guest, and host overlays such as tooltips can eat them on any platform.
+ */
+export async function clickInGuest(guest: Locator, selector: string): Promise<void> {
   const point = await evalInGuest<{ x: number; y: number } | null>(
     guest,
     `(() => { const r = document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect();
-      return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null })()`
+      return r ? { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } : null })()`
   )
   if (!point) {
     throw new Error(`no ${selector} in the plugin guest`)
   }
-  const x = box.x + point.x
-  const y = box.y + point.y
-  // Why: host overlays (the panel button's tooltip, toasts) can sit over the guest and eat the click.
-  await page.mouse.move(x, y)
-  await expect
-    .poll(() =>
-      page.evaluate(({ px, py }) => document.elementFromPoint(px, py)?.tagName ?? null, {
-        px: x,
-        py: y
-      })
-    )
-    .toBe('WEBVIEW')
-  await page.mouse.click(x, y)
+  await guest.evaluate((webview: Electron.WebviewTag, { x, y }) => {
+    webview.sendInputEvent({ type: 'mouseMove', x, y })
+    webview.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 })
+    webview.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 })
+  }, point)
 }
 
 /** Like evalInGuest, but null while the guest is still attaching, for `expect.poll`. */
