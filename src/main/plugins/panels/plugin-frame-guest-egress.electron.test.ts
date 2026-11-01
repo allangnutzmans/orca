@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { createSocket, type Socket as UdpSocket } from 'node:dgram'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http'
@@ -171,7 +172,7 @@ describe('plugin frame guest egress under Electron', () => {
     const javascriptTurn = await tcpListener()
     const stun = await udpListener()
     const http = await httpListener()
-    const unique = Date.now().toString(36)
+    const unique = randomUUID().slice(0, 8)
     const hint = (name: string): string => `orca-guest-${name}-${unique}.invalid`
     const hintLinks = (tag: string): string =>
       `<link rel="dns-prefetch" href="https://${hint(`${tag}-dns`)}">` +

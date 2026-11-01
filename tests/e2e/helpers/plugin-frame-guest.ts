@@ -37,8 +37,16 @@ export async function waitForGuestReady(guest: Locator): Promise<void> {
 /** Focuses `selector` inside the guest so real keyboard input from the page reaches it. */
 export async function focusInGuest(page: Page, guest: Locator, selector: string): Promise<void> {
   await guest.evaluate((webview: Electron.WebviewTag) => webview.focus())
-  await evalInGuest(guest, `document.querySelector(${JSON.stringify(selector)}).focus()`)
-  await page.waitForTimeout(50)
+  const target = `document.querySelector(${JSON.stringify(selector)})`
+  await evalInGuest(guest, `${target}.focus()`)
+  // Page keyboard input reaches the guest once the host has moved focus onto the webview.
+  await expect
+    .poll(async () =>
+      (await guest.evaluate((webview) => webview.ownerDocument.activeElement === webview))
+        ? evalInGuest<boolean>(guest, `document.activeElement === ${target}`)
+        : false
+    )
+    .toBe(true)
 }
 
 /** Clicks `selector` inside the guest with real (trusted, activating) mouse input. */
